@@ -1,0 +1,327 @@
+---
+title: "713 Project 2"
+author: "Zada"
+date: "2025-11-10"
+output: word_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+library(tidyverse)
+library(survival)
+library(survminer)
+library(gtsummary)
+library(broom)
+library(broom.helpers)
+library(gridExtra)
+library(doBy)
+library(multcomp)
+library(gtsummary)
+library(gt)
+```
+
+**TABLE ONE** 
+```{r}
+data(hepatoCellular, package = "asaur")
+
+# analysis dataset
+analysis_vars <- c("OS", "Death", "CXCL17P", "Tumormultiplicity", "AFP", "AST", 
+                   "Tumorsize", "Vascularinvasion", "TNM", "BCLC", "Cirrhosis",
+                   "Age", "Gender")
+
+analysis_data <- hepatoCellular[complete.cases(hepatoCellular[analysis_vars]), ]
+
+# Convert categorical variables to factors with labels
+cat_vars <- c("Tumormultiplicity", "AFP", "AST", "Tumorsize", "Vascularinvasion", 
+              "TNM", "BCLC", "Cirrhosis", "Gender")
+
+analysis_data[cat_vars] <- lapply(analysis_data[cat_vars], as.factor)
+
+levels(analysis_data$Tumormultiplicity) <- c("Solitary", "Multiple")
+levels(analysis_data$AFP) <- c("≤25 ng/ml", ">25 ng/ml")
+levels(analysis_data$AST) <- c("≤42 U/liter", ">42 U/liter") 
+levels(analysis_data$Tumorsize) <- c("≤5 cm", ">5 cm")
+levels(analysis_data$Vascularinvasion) <- c("Absent", "Present")
+levels(analysis_data$TNM) <- c("I+II", "III+IV")
+levels(analysis_data$BCLC) <- c("0-A", "B-C")
+levels(analysis_data$Cirrhosis) <- c("Absent", "Present")
+levels(analysis_data$Gender) <- c("Female", "Male")
+
+cat("Final sample size for analysis:", nrow(analysis_data), "\n")
+```
+
+
+```{r}
+### AIM 2: DESCRIPTIVE STATISTICS 
+
+table1_gt <- analysis_data %>%
+  tbl_summary(
+    include = c("Age", "Gender", "Cirrhosis", "Tumormultiplicity", "AFP", "AST",
+                "Tumorsize", "Vascularinvasion", "TNM", "BCLC", "CXCL17P"),
+    statistic = list(
+      all_continuous() ~ "{mean} ({sd})",
+      all_categorical() ~ "{n} ({p}%)"
+    ),
+    digits = all_continuous() ~ 2,
+    label = list(
+      CXCL17P ~ "Peritumoral CXCL17",
+      Tumormultiplicity ~ "Tumor Multiplicity",
+      Vascularinvasion ~ "Vascular Invasion",
+      Tumorsize ~ "Tumor Size",
+      TNM ~ "TNM Stage",
+      BCLC ~ "BCLC Stage",
+      Cirrhosis ~ "Liver Cirrhosis"
+    )
+  ) %>%
+  modify_caption("**Table 1. Baseline Characteristics of Hepatocellular Carcinoma Patients**") %>%
+  bold_labels() %>%
+  as_gt() %>%
+  tab_options(
+    table.width = pct(85),
+    data_row.padding = px(4)
+  ) %>%
+  tab_style(
+    style = list(cell_text(weight = "bold")),
+    locations = cells_column_labels(everything())
+  ) %>%
+  tab_style(
+    style = cell_text(size = px(14)),
+    locations = cells_title(groups = "title")
+  )
+
+table1_gt
+
+```
+
+
+
+**DESCRIPTIVE UNIVARIABLE COX--AIM 2**
+```{r}
+# Univariate Cox models for descriptive purposes (Table 2)
+cat("\n--- Univariate Cox Models (Descriptive) ---\n")
+uni_models <- list()
+
+covariates <- c("Tumormultiplicity", "AFP", "AST", "Tumorsize", "Vascularinvasion", 
+                "TNM", "BCLC", "Cirrhosis", "Age", "Gender")
+
+for (covar in covariates) {
+  formula <- as.formula(paste("Surv(OS, Death) ~", covar))
+  uni_models[[covar]] <- coxph(formula, data = analysis_data)
+}
+
+# Create summary table of univariate results
+uni_results <- do.call(rbind, lapply(uni_models, function(model) {
+  tidy_model <- tidy(model, conf.int = TRUE, exponentiate = TRUE)
+  return(tidy_model)
+}))
+
+print(uni_results)
+```
+
+**MULTIVARIABLE BOX--AIM 1**
+```{r}
+### AIM 1: Primary Multivariable Analysis
+cat("\n=== AIM 1: PRIMARY MULTIVARIABLE ANALYSIS ===\n")
+
+# Primary Cox model
+cox_model <- coxph(Surv(OS, Death) ~ CXCL17P + Tumormultiplicity + AFP + AST + 
+                     Tumorsize + Vascularinvasion + TNM + BCLC + Cirrhosis, 
+                   data = analysis_data)
+
+
+print(summary(cox_model))
+```
+
+```{r}
+
+table_mv <- tbl_regression(
+  cox_model,
+  exponentiate = TRUE,
+  estimate_fun = purrr::partial(style_number, digits = 3),
+  pvalue_fun = purrr::partial(style_pvalue, digits = 3)
+) %>%
+  modify_header(label ~ "**Variable**") %>%
+  modify_caption("**Table 2. Multivariable Cox Proportional Hazards Model for Overall Survival**") %>%
+  bold_labels()
+
+table_mv
+
+```
+
+
+
+*CONTRAST* 
+```{r}
+# Pre-specified contrast: 75th vs 25th percentile
+cxcl17_quantiles <- quantile(analysis_data$CXCL17P, probs = c(0.25, 0.75))
+cat("\nPre-specified CXCL17P percentiles:\n")
+cat("25th:", round(cxcl17_quantiles[1], 2), "75th:", round(cxcl17_quantiles[2], 2), "\n")
+
+```
+
+
+```{r}
+# 75th − 25th percentile difference
+cxcl17_q <- quantile(analysis_data$CXCL17P, probs = c(0.25, 0.75))
+qdiff <- as.numeric(cxcl17_q[2] - cxcl17_q[1])
+
+# Get coefficient names to ensure exact alignment
+coef_names <- names(coef(cox_model))
+
+# Construct contrast vector (all zeros except CXCL17P coefficient scaled by qdiff)
+L <- rep(0, length(coef_names))
+names(L) <- coef_names
+L["CXCL17P"] <- qdiff
+ 
+# esticon to compute HR diff
+contrast_est <- esticon(cox_model, L)
+
+print(contrast_est)
+
+cont_HR<-print(exp(contrast_est[,1]))
+SE <- contrast_est[,2]
+cont_HR
+
+lb_95 <- exp(cont_HR - 1.96 * SE)
+ub_95 <- exp(cont_HR + 1.96 * SE)
+pval <- contrast_est[,4]
+
+lb_95
+ub_95
+pval
+```
+
+
+
+
+
+*DIAGNOSTIC PLOTS AND DFBETAS*
+```{r}
+### DIAGNOSTIC PLOTS
+cat("\n=== DIAGNOSTIC PLOTS ===\n")
+```
+
+
+```{r}
+ph_test <- cox.zph(cox_model)
+
+# Figure 2: Schoenfeld for PH Assumption
+figure2 <- ggcoxzph(ph_test, 
+                   font.main = 10,
+                   panel.layout = "3x3",
+                   ggtheme = theme_bw(base_size = 9))  
+print(figure2)
+```
+
+
+```{r}
+# Figure 3: Linearity Check (Martingale Residuals)
+martingale_resid <- resid(cox_model, type = "martingale")
+figure3 <- ggplot(analysis_data, aes(x = CXCL17P, y = martingale_resid)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "loess", color = "red", se = TRUE) +
+  labs(title = "Linearity Check: Martingale Residuals vs CXCL17P",
+       x = "CXCL17P", y = "Martingale Residuals") +
+  theme_bw()
+
+print(figure3)
+```
+
+```{r}
+# Figure 4: Influential Observations (DFBETAS) using ggcoxdiagnostics
+figure4 <- ggcoxdiagnostics(cox_model,
+                           type = "dfbetas",
+                           linear.predictions = FALSE,
+                           title = "Influential Observations: DFBETAS for All Variables") +
+  theme_bw()
+
+print(figure4)
+```
+
+
+**AIM 3: ADJUSTED SURVIVAL CURVES**
+```{r}
+
+# Data for plotting adjusted survival curves
+newdata_plot <- analysis_data[1:2, ]
+newdata_plot[] <- lapply(newdata_plot, function(x) {
+  if(is.factor(x)) {
+    factor(names(which.max(table(x))), levels = levels(x))
+  } else {
+    mean(x, na.rm = TRUE)
+  }
+})
+newdata_plot$CXCL17P <- cxcl17_quantiles
+newdata_plot$Group <- c("Low Expression (25th %ile)", "High Expression (75th %ile)")
+
+#  adjusted survival curves
+adj_surv_fit <- survfit(cox_model, newdata = newdata_plot)
+
+# Create Figure 1: Adjusted Survival Curves
+figure1 <- ggsurvplot(adj_surv_fit, data = newdata_plot,
+           conf.int = TRUE,
+           legend.title = "CXCL17P Expression",
+           legend.labs = c("Low Expression (25th %ile)", "High Expression (75th %ile)"),
+           xlab = "Time (Months)",
+           ylab = "Overall Survival Probability",
+           title = "Adjusted Survival Curves by CXCL17P Expression",
+           risk.table = TRUE,
+           ggtheme = theme_bw())
+
+print(figure1)
+```
+
+**RESULTS SUMMARY**
+```{r}
+# Extract CXCL17P main effect from multivariable model (without broom::tidy)
+model_sum <- summary(cox_model)
+idx <- which(names(coef(cox_model)) == "CXCL17P")
+
+logHR <- model_sum$coefficients[idx, "coef"]
+SE <- model_sum$coefficients[idx, "se(coef)"]
+HR <- exp(logHR)
+lower95 <- exp(logHR - 1.96*SE)
+upper95 <- exp(logHR + 1.96*SE)
+pval <- model_sum$coefficients[idx, "Pr(>|z|)"]
+
+cat("\nPrimary Multivariable Effect of CXCL17P (per unit increase):\n")
+cat(sprintf("HR = %.3f (95%% CI: %.3f, %.3f), p = %.4g\n", HR, lower95, upper95, pval))
+
+
+# Contrast summary (75th vs 25th percentile)
+logHR_contrast <- contrast_est[, 1]
+SE_contrast <- contrast_est[, 2]
+HR_contrast <- exp(logHR_contrast)
+lower95_contrast <- exp(logHR_contrast - 1.96 * SE_contrast)
+upper95_contrast <- exp(logHR_contrast + 1.96 * SE_contrast)
+pval_contrast <- contrast_est[, 4]
+
+cat("\nContrast (75th vs 25th percentile of CXCL17P):\n")
+cat(sprintf("HR = %.3f (95%% CI: %.3f, %.3f), p = %.4g\n",
+            HR_contrast, lower95_contrast, upper95_contrast, pval_contrast))
+
+```
+
+*CONTRAST TABLE*
+```{r}
+contrast_table <- tibble(
+  Comparison = "75th vs 25th percentile of CXCL17P",
+  HR = round(HR_contrast, 3),
+  CI = paste0(round(lower95_contrast, 3), " to ", round(upper95_contrast, 3)),
+  `p-value` = format.pval(pval_contrast, digits = 3)
+) %>%
+  gt() %>%
+  tab_header(title = "Table 3. Contrast for CXCL17P (75th vs 25th Percentile)") %>%
+  fmt_missing(columns = everything())
+
+contrast_table
+```
+
+
