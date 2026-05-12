@@ -37,4 +37,3 @@ The analysis uses the `hepatoCellular` dataset from the `asaur` R package, conta
   - Linearity assumption (Martingale residuals)
   - Influential observations (DFBETAS)
 
-## File Structure
