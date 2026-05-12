@@ -38,8 +38,10 @@ The analysis uses the `hepatoCellular` dataset from the `asaur` R package, conta
   - Influential observations (DFBETAS)
 
 ## File Structure
-├── README.md                    # This file
-├── 713_project2.Rmd             # Main R Markdown analysis file
+```
+├── README.md
+├── 713_project2.Rmd
+```
 
 ## Analysis Workflow
 
