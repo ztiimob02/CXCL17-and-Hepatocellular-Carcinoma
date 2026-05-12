@@ -40,9 +40,6 @@ The analysis uses the `hepatoCellular` dataset from the `asaur` R package, conta
 ## File Structure
 ├── README.md # This file
 ├── 713_project2.Rmd # Main R Markdown analysis file
-├── 713_project2.html # Rendered HTML output (if generated)
-└── 713_project2.docx # Word document output
-
 
 ## Analysis Workflow
 
