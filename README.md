@@ -1,4 +1,4 @@
-# Prognostic Role of Peritumoral CXC motif chemokine ligand 17 (CXCL17) in Hepatocellular Carcinoma (HCC)
+# Prognostic Role of Peritumoral CXC Motif Chemokine Ligand 17 (CXCL17) in Hepatocellular Carcinoma (HCC)
 
 ## Project Overview
 
