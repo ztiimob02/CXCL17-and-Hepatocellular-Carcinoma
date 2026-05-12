@@ -40,7 +40,7 @@ The analysis uses the `hepatoCellular` dataset from the `asaur` R package, conta
 ## File Structure
 ```
 ├── README.md
-├── 713_project2.Rmd
+├── CXCL17_Analysis.Rmd
 ```
 
 ## Analysis Workflow
